@@ -322,16 +322,16 @@ void MainWindow::PaintQuickhull()
         for (int i = 0; i < hullPoints->size() - 1; i++) {
             pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[i].x, (*hullPoints)[i].y),
                                     D2D1::Point2F((*hullPoints)[i + 1].x, (*hullPoints)[i + 1].y),
-                                    pBrush, 5);
+                                    pBrush, 1 + i);
         }
 
         pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[hullPoints->size() - 1].x, (*hullPoints)[hullPoints->size() - 1].y),
             D2D1::Point2F((*hullPoints)[0].x, (*hullPoints)[0].y),
-            pBrush, 5);
+            pBrush, 10);
 
-        delete points;
-        delete hull;
-        delete hullPoints;
+        //delete points;
+        //delete hull;
+        //delete hullPoints;
 
         hr = pRenderTarget->EndDraw();
         if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
@@ -367,12 +367,12 @@ void MainWindow::UpdateQuickhull() {
         for (int i = 0; i < hullPoints->size() - 1; i++) {
             pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[i].x, (*hullPoints)[i].y),
                 D2D1::Point2F((*hullPoints)[i + 1].x, (*hullPoints)[i + 1].y),
-                pBrush, 5);
+                pBrush, i + 1);
         }
 
         pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[hullPoints->size() - 1].x, (*hullPoints)[hullPoints->size() - 1].y),
             D2D1::Point2F((*hullPoints)[0].x, (*hullPoints)[0].y),
-            pBrush, 5);
+            pBrush, 10);
 
         delete points;
         delete hull;
