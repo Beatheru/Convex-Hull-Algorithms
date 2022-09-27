@@ -1,0 +1,649 @@
+#include <windows.h>
+#include <Windowsx.h>
+#include <d2d1.h>
+
+#include <list>
+#include <memory>
+using namespace std;
+
+#pragma comment(lib, "d2d1")
+
+#include "basewin.h"
+
+#define MINKOWSKI_DIFFERENCE 0
+#define MINKOWSKI_SUM 1
+#define QUICKHULL 2
+#define POINT_CONVEX_HULL 3
+#define GJK 4
+
+template <class T> void SafeRelease(T **ppT)
+{
+    if (*ppT)
+    {
+        (*ppT)->Release();
+        *ppT = NULL;
+    }
+}
+
+class DPIScale
+{
+    static float scaleX;
+    static float scaleY;
+
+public:
+    static void Initialize(ID2D1Factory *pFactory)
+    {
+        FLOAT dpiX, dpiY;
+        pFactory->GetDesktopDpi(&dpiX, &dpiY);
+        scaleX = dpiX/96.0f;
+        scaleY = dpiY/96.0f;
+    }
+
+    template <typename T>
+    static float PixelsToDipsX(T x)
+    {
+        return static_cast<float>(x) / scaleX;
+    }
+
+    template <typename T>
+    static float PixelsToDipsY(T y)
+    {
+        return static_cast<float>(y) / scaleY;
+    }
+};
+
+float DPIScale::scaleX = 1.0f;
+float DPIScale::scaleY = 1.0f;
+
+struct MyEllipse
+{
+    D2D1_ELLIPSE    ellipse;
+    D2D1_COLOR_F    color;
+
+    void Draw(ID2D1RenderTarget *pRT, ID2D1SolidColorBrush *pBrush)
+    {
+        pBrush->SetColor(color);
+        pRT->FillEllipse(ellipse, pBrush);
+        pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Black));
+        pRT->DrawEllipse(ellipse, pBrush, 1.0f);
+    }
+
+    BOOL HitTest(float x, float y)
+    {
+        const float a = ellipse.radiusX;
+        const float b = ellipse.radiusY;
+        const float x1 = x - ellipse.point.x;
+        const float y1 = y - ellipse.point.y;
+        const float d = ((x1 * x1) / (a * a)) + ((y1 * y1) / (b * b));
+        return d <= 1.0f;
+    }
+};
+
+D2D1::ColorF::Enum colors[] = { D2D1::ColorF::Yellow, D2D1::ColorF::Salmon, D2D1::ColorF::LimeGreen };
+
+
+class MainWindow : public BaseWindow<MainWindow>
+{
+    enum Mode
+    {
+        SelectMode,
+        DragMode
+    };
+
+    HCURSOR                 hCursor;
+
+    ID2D1Factory            *pFactory;
+    ID2D1HwndRenderTarget   *pRenderTarget;
+    ID2D1SolidColorBrush    *pBrush;
+    D2D1_POINT_2F           ptMouse;
+
+    Mode                    mode;
+    size_t                  nextColor;
+    int                     paintMode = -1;
+
+    list<shared_ptr<MyEllipse>>             ellipses;
+    list<shared_ptr<MyEllipse>>::iterator   selection;
+     
+    shared_ptr<MyEllipse> Selection() 
+    { 
+        if (selection == ellipses.end()) 
+        { 
+            return nullptr;
+        }
+        else
+        {
+            return (*selection);
+        }
+    }
+
+    void    ClearSelection() { selection = ellipses.end(); }
+    HRESULT InsertEllipse(float x, float y);
+
+    BOOL    HitTest(float x, float y);
+    void    SetMode(Mode m);
+    void    MoveSelection(float x, float y);
+    HRESULT CreateGraphicsResources();
+    void    DiscardGraphicsResources();
+    void    OnPaint();
+    void    OnPaintSelect();
+    void    PaintMinkowskiDifference();
+    void    PaintMinkowskiSum();
+    void    PaintQuickhull();
+    void    PaintPointConvexHull();
+    void    PaintGJK();
+    void    Resize();
+    void    OnLButtonDown(int pixelX, int pixelY, DWORD flags);
+    void    OnLButtonUp();
+    void    OnMouseMove(int pixelX, int pixelY, DWORD flags);
+
+public:
+
+    MainWindow() : pFactory(NULL), pRenderTarget(NULL), pBrush(NULL), 
+        ptMouse(D2D1::Point2F()), nextColor(0), selection(ellipses.end())
+    {
+    }
+
+    PCWSTR  ClassName() const { return L"Window Class"; }
+    LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
+};
+
+HRESULT MainWindow::CreateGraphicsResources()
+{
+    HRESULT hr = S_OK;
+    if (pRenderTarget == NULL)
+    {
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+
+        D2D1_SIZE_U size = D2D1::SizeU(rc.right, rc.bottom);
+
+        hr = pFactory->CreateHwndRenderTarget(
+            D2D1::RenderTargetProperties(),
+            D2D1::HwndRenderTargetProperties(m_hwnd, size),
+            &pRenderTarget);
+
+        if (SUCCEEDED(hr))
+        {
+            const D2D1_COLOR_F color = D2D1::ColorF(1.0f, 1.0f, 0);
+            hr = pRenderTarget->CreateSolidColorBrush(color, &pBrush);
+        }
+    }
+    return hr;
+}
+
+void MainWindow::DiscardGraphicsResources()
+{
+    SafeRelease(&pRenderTarget);
+    SafeRelease(&pBrush);
+}
+
+void MainWindow::OnPaint()
+{
+    HRESULT hr = CreateGraphicsResources();
+    if (SUCCEEDED(hr))
+    {
+        PAINTSTRUCT ps;
+        BeginPaint(m_hwnd, &ps);
+     
+        pRenderTarget->BeginDraw();
+
+        pRenderTarget->Clear( D2D1::ColorF(D2D1::ColorF::Black) );
+
+        for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
+        {
+            (*i)->Draw(pRenderTarget, pBrush);
+        }
+
+        if (Selection())
+        {
+            pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Red));
+            pRenderTarget->DrawEllipse(Selection()->ellipse, pBrush, 2.0f);
+        }
+
+        hr = pRenderTarget->EndDraw();
+        if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
+        {
+            DiscardGraphicsResources();
+        }
+        EndPaint(m_hwnd, &ps);
+    }
+}
+
+void MainWindow::OnPaintSelect() 
+{
+    switch (paintMode) {
+    case MINKOWSKI_DIFFERENCE:
+        PaintMinkowskiDifference();
+        break;
+
+    case MINKOWSKI_SUM:
+        PaintMinkowskiSum();
+        break;
+
+    case QUICKHULL:
+        PaintQuickhull();
+        break;
+
+    case POINT_CONVEX_HULL:
+        PaintPointConvexHull();
+        break;
+
+    case GJK:
+        PaintGJK();
+        break;
+    default:
+        OnPaint();
+    }
+}
+
+void MainWindow::PaintMinkowskiDifference()
+{
+    HRESULT hr = CreateGraphicsResources();
+    if (SUCCEEDED(hr))
+    {
+        PAINTSTRUCT ps;
+        BeginPaint(m_hwnd, &ps);
+
+        pRenderTarget->BeginDraw();
+
+        pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::White));
+
+        hr = pRenderTarget->EndDraw();
+        if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
+        {
+            DiscardGraphicsResources();
+        }
+        EndPaint(m_hwnd, &ps);
+    }
+}
+
+void MainWindow::PaintMinkowskiSum()
+{
+    HRESULT hr = CreateGraphicsResources();
+    if (SUCCEEDED(hr))
+    {
+        PAINTSTRUCT ps;
+        BeginPaint(m_hwnd, &ps);
+
+        pRenderTarget->BeginDraw();
+
+        pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Red));
+
+        hr = pRenderTarget->EndDraw();
+        if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
+        {
+            DiscardGraphicsResources();
+        }
+        EndPaint(m_hwnd, &ps);
+    }
+}
+
+void MainWindow::PaintQuickhull()
+{
+    HRESULT hr = CreateGraphicsResources();
+    if (SUCCEEDED(hr))
+    {
+        PAINTSTRUCT ps;
+        BeginPaint(m_hwnd, &ps);
+
+        pRenderTarget->BeginDraw();
+
+        pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Blue));
+
+        hr = pRenderTarget->EndDraw();
+        if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
+        {
+            DiscardGraphicsResources();
+        }
+        EndPaint(m_hwnd, &ps);
+    }
+}
+
+void MainWindow::PaintPointConvexHull()
+{
+    HRESULT hr = CreateGraphicsResources();
+    if (SUCCEEDED(hr))
+    {
+        PAINTSTRUCT ps;
+        BeginPaint(m_hwnd, &ps);
+
+        pRenderTarget->BeginDraw();
+
+        pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Green));
+
+        hr = pRenderTarget->EndDraw();
+        if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
+        {
+            DiscardGraphicsResources();
+        }
+        EndPaint(m_hwnd, &ps);
+    }
+}
+
+void MainWindow::PaintGJK()
+{
+    HRESULT hr = CreateGraphicsResources();
+    if (SUCCEEDED(hr))
+    {
+        PAINTSTRUCT ps;
+        BeginPaint(m_hwnd, &ps);
+
+        pRenderTarget->BeginDraw();
+
+        pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Yellow));
+
+        hr = pRenderTarget->EndDraw();
+        if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
+        {
+            DiscardGraphicsResources();
+        }
+        EndPaint(m_hwnd, &ps);
+    }
+}
+
+void MainWindow::Resize()
+{
+    if (pRenderTarget != NULL)
+    {
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+
+        D2D1_SIZE_U size = D2D1::SizeU(rc.right, rc.bottom);
+
+        pRenderTarget->Resize(size);
+
+        InvalidateRect(m_hwnd, NULL, FALSE);
+    }
+}
+
+void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
+{
+    const float dipX = DPIScale::PixelsToDipsX(pixelX);
+    const float dipY = DPIScale::PixelsToDipsY(pixelY);
+    
+    ClearSelection();
+
+    if (HitTest(dipX, dipY))
+    {
+        SetCapture(m_hwnd);
+
+        ptMouse = Selection()->ellipse.point;
+        ptMouse.x -= dipX;
+        ptMouse.y -= dipY;
+
+        SetMode(DragMode);
+    }
+
+    InvalidateRect(m_hwnd, NULL, FALSE);
+}
+
+void MainWindow::OnLButtonUp()
+{
+    if (mode == DragMode)
+    {
+        SetMode(SelectMode);
+    }
+    ReleaseCapture(); 
+}
+
+
+void MainWindow::OnMouseMove(int pixelX, int pixelY, DWORD flags)
+{
+    const float dipX = DPIScale::PixelsToDipsX(pixelX);
+    const float dipY = DPIScale::PixelsToDipsY(pixelY);
+
+    if ((flags & MK_LBUTTON) && Selection())
+    { 
+        if (mode == DragMode)
+        {
+            // Move the ellipse.
+            Selection()->ellipse.point.x = dipX + ptMouse.x;
+            Selection()->ellipse.point.y = dipY + ptMouse.y;
+        }
+        InvalidateRect(m_hwnd, NULL, FALSE);
+    }
+}
+
+HRESULT MainWindow::InsertEllipse(float x, float y)
+{
+    try
+    {
+        selection = ellipses.insert(
+            ellipses.end(), 
+            shared_ptr<MyEllipse>(new MyEllipse()));
+
+        Selection()->ellipse.point = ptMouse = D2D1::Point2F(x, y);
+        Selection()->ellipse.radiusX = Selection()->ellipse.radiusY = 2.0f; 
+        Selection()->color = D2D1::ColorF( colors[nextColor] );
+
+        nextColor = (nextColor + 1) % ARRAYSIZE(colors);
+    }
+    catch (std::bad_alloc)
+    {
+        return E_OUTOFMEMORY;
+    }
+    return S_OK;
+}
+
+
+BOOL MainWindow::HitTest(float x, float y)
+{
+    for (auto i = ellipses.rbegin(); i != ellipses.rend(); ++i)
+    {
+        if ((*i)->HitTest(x, y))
+        {
+            selection = (++i).base();
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+void MainWindow::MoveSelection(float x, float y)
+{
+    if ((mode == SelectMode) && Selection())
+    {
+        Selection()->ellipse.point.x += x;
+        Selection()->ellipse.point.y += y;
+        InvalidateRect(m_hwnd, NULL, FALSE);
+    }
+}
+
+void MainWindow::SetMode(Mode m)
+{
+    mode = m;
+
+    LPWSTR cursor;
+    switch (mode)
+    {
+    case SelectMode:
+        cursor = IDC_HAND;
+        break;
+
+    case DragMode:
+        cursor = IDC_SIZEALL;
+        break;
+    }
+
+    hCursor = LoadCursor(NULL, cursor);
+    SetCursor(hCursor);
+}
+
+void createButtons(HWND m_hwnd) {
+    HWND hwndButton_MinkowskiDifference = CreateWindow(
+        L"BUTTON",
+        L"Minkowski Difference",
+        WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles 
+        10,         // x position 
+        10,         // y position 
+        150,        // Button width
+        50,        // Button height
+        m_hwnd,     // Parent window
+        (HMENU)MINKOWSKI_DIFFERENCE,       // Menu.
+        (HINSTANCE)GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE),
+        NULL);      // Pointer not needed.
+
+    HWND hwndButton_MinkowskiSum = CreateWindow(
+        L"BUTTON",
+        L"Minkowski Sum",
+        WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles 
+        10,         // x position 
+        65,         // y position 
+        150,        // Button width
+        50,        // Button height
+        m_hwnd,     // Parent window
+        (HMENU)MINKOWSKI_SUM,       // Menu.
+        (HINSTANCE)GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE),
+        NULL);      // Pointer not needed.
+
+    HWND hwndButton_Quickhull = CreateWindow(
+        L"BUTTON",
+        L"Quickhull",
+        WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles 
+        10,         // x position 
+        120,         // y position 
+        150,        // Button width
+        50,        // Button height
+        m_hwnd,     // Parent window
+        (HMENU)QUICKHULL,       // Menu.
+        (HINSTANCE)GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE),
+        NULL);      // Pointer not needed.
+
+    HWND hwndButton_PointConvexHull = CreateWindow(
+        L"BUTTON",
+        L"Point Convex Hull",
+        WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles 
+        10,         // x position 
+        175,         // y position 
+        150,        // Button width
+        50,        // Button height
+        m_hwnd,     // Parent window
+        (HMENU)POINT_CONVEX_HULL,       // Menu.
+        (HINSTANCE)GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE),
+        NULL);      // Pointer not needed.
+
+    HWND hwndButton_GJK = CreateWindow(
+        L"BUTTON",
+        L"GJK",
+        WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles 
+        10,         // x position 
+        230,         // y position 
+        150,        // Button width
+        50,        // Button height
+        m_hwnd,     // Parent window
+        (HMENU)GJK,       // Menu.
+        (HINSTANCE)GetWindowLongPtr(m_hwnd, GWLP_HINSTANCE),
+        NULL);      // Pointer not needed.
+}
+
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
+{
+    MainWindow win;
+
+    if (!win.Create(L"Convex Hull Algorithms", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN))
+    {
+        return 0;
+    }
+
+    createButtons(win.Window());
+
+    ShowWindow(win.Window(), nCmdShow);
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+    return 0;
+}
+
+LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (uMsg)
+    {
+    case WM_CREATE:
+        if (FAILED(D2D1CreateFactory(
+                D2D1_FACTORY_TYPE_SINGLE_THREADED, &pFactory)))
+        {
+            return -1;  // Fail CreateWindowEx.
+        }
+        DPIScale::Initialize(pFactory);
+        SetMode(SelectMode);
+        return 0;
+
+    case WM_DESTROY:
+        DiscardGraphicsResources();
+        SafeRelease(&pFactory);
+        PostQuitMessage(0);
+        return 0;
+
+    case WM_PAINT:
+        OnPaintSelect();
+        return 0;
+
+    case WM_SIZE:
+        Resize();
+        return 0;
+
+    case WM_LBUTTONDOWN: 
+        OnLButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), (DWORD)wParam);
+        return 0;
+
+    case WM_LBUTTONUP: 
+        OnLButtonUp();
+        return 0;
+
+    case WM_MOUSEMOVE: 
+        OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), (DWORD)wParam);
+        return 0;
+
+    case WM_SETCURSOR:
+        if (LOWORD(lParam) == HTCLIENT)
+        {
+            SetCursor(hCursor);
+            return TRUE;
+        }
+        break;
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) 
+        {
+        case MINKOWSKI_DIFFERENCE:
+            paintMode = MINKOWSKI_DIFFERENCE;
+            PaintMinkowskiDifference();
+            //pRenderTarget->BeginDraw();
+            //pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::White));
+            //pRenderTarget->EndDraw();
+            //OnPaint();
+            return 0;
+
+        case MINKOWSKI_SUM:
+            paintMode = MINKOWSKI_SUM;
+            //MessageBox(m_hwnd, L"Sum", L"Hi", MB_OK);
+            PaintMinkowskiSum();
+            break;
+
+        case QUICKHULL:
+            paintMode = QUICKHULL;
+            //MessageBox(m_hwnd, L"Quickhull", L"Hi", MB_OK);
+            PaintQuickhull();
+            break;
+
+        case POINT_CONVEX_HULL:
+            paintMode = POINT_CONVEX_HULL;
+            //MessageBox(m_hwnd, L"Point convex hull", L"Hi", MB_OK);
+            PaintPointConvexHull();
+            break;
+
+        case GJK:
+            paintMode = GJK;
+            //MessageBox(m_hwnd, L"GJK", L"Hi", MB_OK);
+            PaintGJK();
+            break;
+        }
+        break;
+
+    }
+    return DefWindowProc(m_hwnd, uMsg, wParam, lParam);
+}

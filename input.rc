@@ -1,0 +1,9 @@
+//<Snippetinput_rc>
+#include "resource.h"
+
+IDR_ACCEL1 ACCELERATORS
+{
+    0x71,   ID_SELECT_MODE, VIRTKEY             // F2
+}
+//</Snippetinput_rc>
+	
