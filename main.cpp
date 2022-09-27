@@ -2,6 +2,9 @@
 #include <Windowsx.h>
 #include <d2d1.h>
 
+#include "ConvexHull.h"
+#include "DataTypes.h"
+
 #include <list>
 #include <memory>
 using namespace std;
@@ -62,10 +65,10 @@ struct MyEllipse
 
     void Draw(ID2D1RenderTarget *pRT, ID2D1SolidColorBrush *pBrush)
     {
+        pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
+        pRT->DrawEllipse(ellipse, pBrush, 5.0f);
         pBrush->SetColor(color);
         pRT->FillEllipse(ellipse, pBrush);
-        pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Black));
-        pRT->DrawEllipse(ellipse, pBrush, 1.0f);
     }
 
     BOOL HitTest(float x, float y)
@@ -129,6 +132,7 @@ class MainWindow : public BaseWindow<MainWindow>
     void    PaintMinkowskiDifference();
     void    PaintMinkowskiSum();
     void    PaintQuickhull();
+    void    UpdateQuickhull();
     void    PaintPointConvexHull();
     void    PaintGJK();
     void    Resize();
@@ -221,7 +225,7 @@ void MainWindow::OnPaintSelect()
         break;
 
     case QUICKHULL:
-        PaintQuickhull();
+        UpdateQuickhull();
         break;
 
     case POINT_CONVEX_HULL:
@@ -284,11 +288,95 @@ void MainWindow::PaintQuickhull()
     if (SUCCEEDED(hr))
     {
         PAINTSTRUCT ps;
+        ellipses.clear();
         BeginPaint(m_hwnd, &ps);
 
         pRenderTarget->BeginDraw();
+        pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Black));
 
-        pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Blue));
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+        int rightLimit = rc.right - 200 - 500;
+        int bottomLimit = rc.bottom - 200 - 150;
+
+        std::vector<struct point> *points = new std::vector<struct point>();
+
+        for (int i = 0; i < 15; i++) {
+            int x = rand() % rightLimit + 500;
+            int y = rand() % bottomLimit + 150;
+
+            struct point p = {x, y};
+            points->push_back(p);
+
+            D2D1_ELLIPSE point = D2D1::Ellipse(D2D1::Point2F(x, y), 10, 10);
+            shared_ptr<MyEllipse> newEllipse = shared_ptr<MyEllipse>(new MyEllipse());
+            newEllipse->ellipse = point;
+            newEllipse->color = D2D1::ColorF(D2D1::ColorF::Green);
+            ellipses.insert(ellipses.end(), newEllipse);
+            (*newEllipse).Draw(pRenderTarget, pBrush);
+        }
+
+        ConvexHull *hull = new ConvexHull(*points);
+        std::vector<struct point> *hullPoints = hull->getHull();
+
+        for (int i = 0; i < hullPoints->size() - 1; i++) {
+            pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[i].x, (*hullPoints)[i].y),
+                                    D2D1::Point2F((*hullPoints)[i + 1].x, (*hullPoints)[i + 1].y),
+                                    pBrush, 5);
+        }
+
+        pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[hullPoints->size() - 1].x, (*hullPoints)[hullPoints->size() - 1].y),
+            D2D1::Point2F((*hullPoints)[0].x, (*hullPoints)[0].y),
+            pBrush, 5);
+
+        delete points;
+        delete hull;
+        delete hullPoints;
+
+        hr = pRenderTarget->EndDraw();
+        if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
+        {
+            DiscardGraphicsResources();
+        }
+        EndPaint(m_hwnd, &ps);
+    }
+}
+
+void MainWindow::UpdateQuickhull() {
+    HRESULT hr = CreateGraphicsResources();
+    if (SUCCEEDED(hr))
+    {
+        PAINTSTRUCT ps;
+        BeginPaint(m_hwnd, &ps);
+
+        pRenderTarget->BeginDraw();
+        pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+
+        std::vector<struct point>* points = new std::vector<struct point>();
+
+        for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
+        {
+            (*i)->Draw(pRenderTarget, pBrush);
+            struct point p = { (*i)->ellipse.point.x, (*i)->ellipse.point.y };
+            points->push_back(p);
+        }
+
+        ConvexHull* hull = new ConvexHull(*points);
+        std::vector<struct point>* hullPoints = hull->getHull();
+
+        for (int i = 0; i < hullPoints->size() - 1; i++) {
+            pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[i].x, (*hullPoints)[i].y),
+                D2D1::Point2F((*hullPoints)[i + 1].x, (*hullPoints)[i + 1].y),
+                pBrush, 5);
+        }
+
+        pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[hullPoints->size() - 1].x, (*hullPoints)[hullPoints->size() - 1].y),
+            D2D1::Point2F((*hullPoints)[0].x, (*hullPoints)[0].y),
+            pBrush, 5);
+
+        delete points;
+        delete hull;
+        delete hullPoints;
 
         hr = pRenderTarget->EndDraw();
         if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
@@ -457,11 +545,11 @@ void MainWindow::SetMode(Mode m)
     switch (mode)
     {
     case SelectMode:
-        cursor = IDC_HAND;
+        cursor = IDC_ARROW;
         break;
 
     case DragMode:
-        cursor = IDC_SIZEALL;
+        cursor = IDC_HAND;
         break;
     }
 
@@ -612,33 +700,25 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         case MINKOWSKI_DIFFERENCE:
             paintMode = MINKOWSKI_DIFFERENCE;
             PaintMinkowskiDifference();
-            //pRenderTarget->BeginDraw();
-            //pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::White));
-            //pRenderTarget->EndDraw();
-            //OnPaint();
             return 0;
 
         case MINKOWSKI_SUM:
             paintMode = MINKOWSKI_SUM;
-            //MessageBox(m_hwnd, L"Sum", L"Hi", MB_OK);
             PaintMinkowskiSum();
             break;
 
         case QUICKHULL:
             paintMode = QUICKHULL;
-            //MessageBox(m_hwnd, L"Quickhull", L"Hi", MB_OK);
             PaintQuickhull();
             break;
 
         case POINT_CONVEX_HULL:
             paintMode = POINT_CONVEX_HULL;
-            //MessageBox(m_hwnd, L"Point convex hull", L"Hi", MB_OK);
             PaintPointConvexHull();
             break;
 
         case GJK:
             paintMode = GJK;
-            //MessageBox(m_hwnd, L"GJK", L"Hi", MB_OK);
             PaintGJK();
             break;
         }
