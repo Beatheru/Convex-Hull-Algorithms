@@ -108,6 +108,8 @@ class MainWindow : public BaseWindow<MainWindow>
     int                     paintMode = -1;
     bool                    inHull = false;
     Converter               *conv;
+    std::vector<ConvexHull*> *hulls = new std::vector<ConvexHull*>;
+    int                     hullSelected;
 
     double                  xOffset = 0;
     double                  yOffset = 0;
@@ -260,6 +262,7 @@ void MainWindow::PaintMinkowskiGJK()
     {
         PAINTSTRUCT ps;
         ellipses.clear();
+        hulls->clear();
         BeginPaint(m_hwnd, &ps);
 
         pRenderTarget->BeginDraw();
@@ -292,12 +295,10 @@ void MainWindow::PaintMinkowskiGJK()
         }
 
         ConvexHull* hull1 = new ConvexHull(*points);
+        hulls->push_back(hull1);
         DrawConvexHull(hull1->getHull(), D2D1::ColorF(D2D1::ColorF::White));
 
         /////////////////////////////////////////////////////////////////////////////////////////
-
-        //rightLimit = rc.right / 6.f - 50;
-        //bottomLimit = rc.bottom / 6.f - 50;
 
         points->clear();
 
@@ -316,6 +317,7 @@ void MainWindow::PaintMinkowskiGJK()
         }
 
         ConvexHull* hull2 = new ConvexHull(*points);
+        hulls->push_back(hull2);
         DrawConvexHull(hull2->getHull(), D2D1::ColorF(D2D1::ColorF::White));
 
         delete points;
@@ -366,6 +368,7 @@ void MainWindow::UpdateMinkowskiGJK() {
         }
 
         ConvexHull* hull1 = new ConvexHull(*points);
+        (*hulls)[0] = hull1;
         DrawConvexHull(hull1->getHull(), D2D1::ColorF(D2D1::ColorF::White));
 
         ///////////////////////////////////////////////
@@ -381,6 +384,7 @@ void MainWindow::UpdateMinkowskiGJK() {
         }
 
         ConvexHull *hull2 = new ConvexHull(*points);
+        (*hulls)[1] = hull2;
         DrawConvexHull(hull2->getHull(), D2D1::ColorF(D2D1::ColorF::White));
 
         ConvexHull* newHull = paintMode == MINKOWSKI_SUM ? hull1->minkowskiSum(hull1, hull2, conv) : hull1->minkowskiDifference(hull1, hull2, conv);
@@ -649,6 +653,36 @@ void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
 
         SetMode(DragMode);
     }
+    else if ((*hulls)[0] != NULL && (*hulls)[0]->containsPoint({ dipX, dipY })) {
+        SetCapture(m_hwnd);
+        hullSelected = 0;
+        ptMouse.x = dipX;
+        ptMouse.y = dipY;
+        temp->clear();
+        for (int i = 0; i < ellipses.size() / 2; i++) {
+            auto iterator = ellipses.begin();
+            std::advance(iterator, i);
+
+            struct point p = { (*iterator)->ellipse.point.x, (*iterator)->ellipse.point.y };
+            temp->push_back(p);
+        }
+        SetMode(DragHull);
+    }
+    else if ((*hulls)[1] != NULL && (*hulls)[1]->containsPoint({ dipX, dipY })) {
+        SetCapture(m_hwnd);
+        hullSelected = 1;
+        ptMouse.x = dipX;
+        ptMouse.y = dipY;
+        temp->clear();
+        for (int i = ellipses.size() / 2; i < ellipses.size(); i++) {
+            auto iterator = ellipses.begin();
+            std::advance(iterator, i);
+
+            struct point p = { (*iterator)->ellipse.point.x, (*iterator)->ellipse.point.y };
+            temp->push_back(p);
+        }
+        SetMode(DragHull);
+    }
     /*else {
         SetCapture(m_hwnd);
         ptMouse.x = dipX;
@@ -685,6 +719,9 @@ void MainWindow::OnLButtonUp()
         //yOffset = 0;
         SetMode(SelectMode);
     }
+    else if (mode == DragHull) {
+        SetMode(SelectMode);
+    }
 
     ReleaseCapture(); 
 }
@@ -703,6 +740,34 @@ void MainWindow::OnMouseMove(int pixelX, int pixelY, DWORD flags)
             Selection()->ellipse.point.y = dipY + ptMouse.y;
         }
         InvalidateRect(m_hwnd, NULL, FALSE);
+    }
+    else if (flags & MK_LBUTTON && mode == DragHull) {
+        xOffset = (dipX - ptMouse.x);
+        yOffset = (dipY - ptMouse.y);
+        int j = 0;
+
+        if (hullSelected == 0) {
+            for (int i = 0; i < ellipses.size() / 2; i++) {
+                auto iterator = ellipses.begin();
+                std::advance(iterator, i);
+
+                (*iterator)->ellipse.point.x = (*temp)[j].x + xOffset;
+                (*iterator)->ellipse.point.y = (*temp)[j].y + yOffset;
+                j++;
+            }
+        }
+        else {
+            for (int i = ellipses.size() / 2; i < ellipses.size(); i++) {
+                auto iterator = ellipses.begin();
+                std::advance(iterator, i);
+
+                (*iterator)->ellipse.point.x = (*temp)[j].x + xOffset;
+                (*iterator)->ellipse.point.y = (*temp)[j].y + yOffset;
+                j++;
+            }
+        }
+
+        SendMessage(m_hwnd, WM_PAINT, NULL, NULL);
     }
     /*else if (flags & MK_LBUTTON && mode == DragScreen) {
         xOffset = (dipX - ptMouse.x);
