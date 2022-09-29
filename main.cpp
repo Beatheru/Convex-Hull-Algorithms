@@ -114,6 +114,11 @@ class MainWindow : public BaseWindow<MainWindow>
     double                  xOffset = 0;
     double                  yOffset = 0;
 
+    double                   horizontalOriginalY;
+    double                   verticalOriginalX;
+    double                   horizontalY;
+    double                   verticalX;
+
     std::vector<struct point>* temp = new std::vector<struct point>;
 
     list<shared_ptr<MyEllipse>>             ellipses;
@@ -271,9 +276,12 @@ void MainWindow::PaintMinkowskiGJK()
         RECT rc;
         GetClientRect(m_hwnd, &rc);
 
+        horizontalY = rc.bottom / 2.f;
+        verticalX = rc.right / 2.f;
+
         pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Yellow));
-        pRenderTarget->DrawLine(D2D1::Point2F(0, rc.bottom / 2.f), D2D1::Point2F(rc.right, rc.bottom / 2.f), pBrush, 1);
-        pRenderTarget->DrawLine(D2D1::Point2F(rc.right / 2.f, 0), D2D1::Point2F(rc.right / 2.f, rc.bottom), pBrush, 1);
+        pRenderTarget->DrawLine(D2D1::Point2F(0, horizontalY), D2D1::Point2F(rc.right, horizontalY), pBrush, 1);
+        pRenderTarget->DrawLine(D2D1::Point2F(verticalX, 0), D2D1::Point2F(verticalX, rc.bottom), pBrush, 1);
 
         int rightLimit = rc.right / 6.f - 50;
         int bottomLimit = rc.bottom / 6.f - 50;
@@ -353,9 +361,10 @@ void MainWindow::UpdateMinkowskiGJK() {
         GetClientRect(m_hwnd, &rc);
         struct point origin = { rc.right / 2.f, rc.bottom / 2.f };
 
+        
         pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Yellow));
-        pRenderTarget->DrawLine(D2D1::Point2F(0, rc.bottom / 2.f), D2D1::Point2F(rc.right, rc.bottom / 2.f), pBrush, 1);
-        pRenderTarget->DrawLine(D2D1::Point2F(rc.right / 2.f, 0), D2D1::Point2F(rc.right / 2.f, rc.bottom), pBrush, 1);
+        pRenderTarget->DrawLine(D2D1::Point2F(0, horizontalY), D2D1::Point2F(rc.right, horizontalY), pBrush, 1);
+        pRenderTarget->DrawLine(D2D1::Point2F(verticalX, 0), D2D1::Point2F(verticalX, rc.bottom), pBrush, 1);
 
         std::vector<struct point> *points = new std::vector<struct point>();
 
@@ -683,16 +692,18 @@ void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
         }
         SetMode(DragHull);
     }
-    /*else {
+    else {
         SetCapture(m_hwnd);
         ptMouse.x = dipX;
         ptMouse.y = dipY;
+        horizontalOriginalY = horizontalY;
+        verticalOriginalX = verticalX;
         temp->clear();
         for (auto i = ellipses.begin(); i != ellipses.end(); i++) {
             temp->push_back({ (*i)->ellipse.point.x, (*i)->ellipse.point.y });
         }
         SetMode(DragScreen);
-    } */
+    }
 
     InvalidateRect(m_hwnd, NULL, FALSE);
 }
@@ -769,9 +780,12 @@ void MainWindow::OnMouseMove(int pixelX, int pixelY, DWORD flags)
 
         SendMessage(m_hwnd, WM_PAINT, NULL, NULL);
     }
-    /*else if (flags & MK_LBUTTON && mode == DragScreen) {
+    else if (flags & MK_LBUTTON && mode == DragScreen) {
         xOffset = (dipX - ptMouse.x);
         yOffset = (dipY - ptMouse.y);
+
+        horizontalY = horizontalOriginalY + yOffset;
+        verticalX = verticalOriginalX + xOffset;
 
         int j = 0;
         for (auto i = ellipses.begin(); i != ellipses.end(); i++) {
@@ -781,7 +795,7 @@ void MainWindow::OnMouseMove(int pixelX, int pixelY, DWORD flags)
         }
 
         SendMessage(m_hwnd, WM_PAINT, NULL, NULL);
-    } */
+    }
 }
 
 BOOL MainWindow::HitTest(float x, float y)

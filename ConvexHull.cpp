@@ -117,7 +117,7 @@ static ConvexHull *minkowskiAux(ConvexHull *hull1, ConvexHull *hull2, bool sum, 
 			if(sum)
 				newPoint = { point1.x + point2.x, point1.y + point2.y };
 			else
-				newPoint = { point1.x + point2.x, point1.y + point2.y };
+				newPoint = { point1.x - point2.x, point1.y - point2.y };
 			sumPoints->push_back(newPoint);
 		}
 	}
