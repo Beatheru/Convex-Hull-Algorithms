@@ -313,11 +313,12 @@ void MainWindow::PaintQuickhull()
             newEllipse->ellipse = point;
             newEllipse->color = D2D1::ColorF(D2D1::ColorF::Green);
             ellipses.insert(ellipses.end(), newEllipse);
-            (*newEllipse).Draw(pRenderTarget, pBrush);
         }
 
         ConvexHull *hull = new ConvexHull(*points);
         std::vector<struct point> *hullPoints = hull->getHull();
+
+        pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
 
         for (int i = 0; i < hullPoints->size() - 1; i++) {
             pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[i].x, (*hullPoints)[i].y),
@@ -329,9 +330,14 @@ void MainWindow::PaintQuickhull()
             D2D1::Point2F((*hullPoints)[0].x, (*hullPoints)[0].y),
             pBrush, 1);
 
-        //delete points;
-        //delete hull;
-        //delete hullPoints;
+        delete points;
+        delete hull;
+        delete hullPoints;
+
+        for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
+        {
+            (*i)->Draw(pRenderTarget, pBrush);
+        }
 
         hr = pRenderTarget->EndDraw();
         if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
@@ -356,13 +362,14 @@ void MainWindow::UpdateQuickhull() {
 
         for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
         {
-            (*i)->Draw(pRenderTarget, pBrush);
             struct point p = { (*i)->ellipse.point.x, (*i)->ellipse.point.y };
             points->push_back(p);
         }
 
         ConvexHull* hull = new ConvexHull(*points);
         std::vector<struct point>* hullPoints = hull->getHull();
+
+        pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
 
         for (int i = 0; i < hullPoints->size() - 1; i++) {
             pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[i].x, (*hullPoints)[i].y),
@@ -377,6 +384,11 @@ void MainWindow::UpdateQuickhull() {
         delete points;
         delete hull;
         delete hullPoints;
+
+        for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
+        {
+            (*i)->Draw(pRenderTarget, pBrush);
+        }
 
         hr = pRenderTarget->EndDraw();
         if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
