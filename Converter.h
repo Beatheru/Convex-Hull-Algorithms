@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include "ConvexHull.h"
 #include "DataTypes.h"
 
 class Converter
