@@ -4,6 +4,7 @@
 
 #include "ConvexHull.h"
 #include "DataTypes.h"
+#include "Converter.h"
 
 #include <list>
 #include <memory>
@@ -105,6 +106,7 @@ class MainWindow : public BaseWindow<MainWindow>
     size_t                  nextColor;
     int                     paintMode = -1;
     bool                    inHull = false;
+    Converter               *conv;
 
     double                  xOffset = 0;
     double                  yOffset = 0;
@@ -180,6 +182,8 @@ HRESULT MainWindow::CreateGraphicsResources()
             const D2D1_COLOR_F color = D2D1::ColorF(1.0f, 1.0f, 0);
             hr = pRenderTarget->CreateSolidColorBrush(color, &pBrush);
         }
+
+        conv = new Converter(rc.right, rc.bottom);
     }
     return hr;
 }
@@ -374,7 +378,7 @@ void MainWindow::PaintMinkowskiSum()
 
         //////////////////////////////////////////////////////////////
 
-        /*ConvexHull* newHull = hull1->minkowskiSum(hull1, hull2);
+        ConvexHull* newHull = hull1->minkowskiSum(hull1, hull2, conv);
         std::vector<struct point>* newHullPoints = newHull->getHull();
 
         pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
@@ -392,7 +396,7 @@ void MainWindow::PaintMinkowskiSum()
         for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
         {
             (*i)->Draw(pRenderTarget, pBrush);
-        } */
+        }
 
         hr = pRenderTarget->EndDraw();
         if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
@@ -440,8 +444,8 @@ void MainWindow::UpdateMinkowskiSum() {
             points2->push_back(p);
         }
 
-        ConvexHull* hull = new ConvexHull(*points1);
-        std::vector<struct point>* hullPoints = hull->getHull();
+        ConvexHull* hull1 = new ConvexHull(*points1);
+        std::vector<struct point>* hullPoints = hull1->getHull();
 
         pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
 
@@ -454,17 +458,12 @@ void MainWindow::UpdateMinkowskiSum() {
         pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[hullPoints->size() - 1].x, (*hullPoints)[hullPoints->size() - 1].y),
             D2D1::Point2F((*hullPoints)[0].x, (*hullPoints)[0].y),
             pBrush, 1);
-
-        delete hull;
-        delete hullPoints;
-
-        
 
         ///////////////////////////////////////////////
 
 
-        hull = new ConvexHull(*points2);
-        hullPoints = hull->getHull();
+        ConvexHull *hull2 = new ConvexHull(*points2);
+        hullPoints = hull2->getHull();
 
         pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
 
@@ -478,9 +477,20 @@ void MainWindow::UpdateMinkowskiSum() {
             D2D1::Point2F((*hullPoints)[0].x, (*hullPoints)[0].y),
             pBrush, 1);
 
-        //delete points;
-        delete hull;
-        delete hullPoints;
+        ConvexHull *newHull = hull1->minkowskiSum(hull1, hull2, conv);
+        std::vector<struct point> *newHullPoints = newHull->getHull();
+
+        pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
+
+        for (int i = 0; i < newHullPoints->size() - 1; i++) {
+            pRenderTarget->DrawLine(D2D1::Point2F((*newHullPoints)[i].x, (*newHullPoints)[i].y),
+                D2D1::Point2F((*newHullPoints)[i + 1].x, (*newHullPoints)[i + 1].y),
+                pBrush, 1);
+        }
+
+        pRenderTarget->DrawLine(D2D1::Point2F((*newHullPoints)[newHullPoints->size() - 1].x, (*newHullPoints)[newHullPoints->size() - 1].y),
+            D2D1::Point2F((*newHullPoints)[0].x, (*newHullPoints)[0].y),
+            pBrush, 1);
 
         for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
         {

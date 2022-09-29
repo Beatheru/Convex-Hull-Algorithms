@@ -92,11 +92,13 @@
     <ClCompile Include="ConvexHull.cpp" />
     <ClCompile Include="DataTypes.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Converter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="basewin.h" />
     <ClInclude Include="ConvexHull.h" />
     <ClInclude Include="DataTypes.h" />
+    <ClInclude Include="Converter.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
