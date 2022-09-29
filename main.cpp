@@ -109,6 +109,8 @@ class MainWindow : public BaseWindow<MainWindow>
     double                  xOffset = 0;
     double                  yOffset = 0;
 
+    std::vector<struct point>* temp = new std::vector<struct point>;
+
     list<shared_ptr<MyEllipse>>             ellipses;
     list<shared_ptr<MyEllipse>>::iterator   selection;
      
@@ -421,11 +423,6 @@ void MainWindow::UpdateMinkowskiSum() {
 
         std::vector<struct point>* points1 = new std::vector<struct point>();
         std::vector<struct point>* points2 = new std::vector<struct point>();
-
-        for (auto i = ellipses.begin(); i != ellipses.end(); i++) {
-            (*i)->ellipse.point.x += xOffset;
-            (*i)->ellipse.point.y += yOffset;
-        }
 
         for (int i = 0; i < ellipses.size() / 2; i++) {
             auto iterator = ellipses.begin();
@@ -818,9 +815,16 @@ void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
 
         SetMode(DragMode);
     }
-    else {
+    /*else {
+        SetCapture(m_hwnd);
+        ptMouse.x = dipX;
+        ptMouse.y = dipY;
+        temp->clear();
+        for (auto i = ellipses.begin(); i != ellipses.end(); i++) {
+            temp->push_back({ (*i)->ellipse.point.x, (*i)->ellipse.point.y });
+        }
         SetMode(DragScreen);
-    }
+    } */
 
     InvalidateRect(m_hwnd, NULL, FALSE);
 }
@@ -843,6 +847,8 @@ void MainWindow::OnLButtonUp()
         pRenderTarget->EndDraw();
     }
     else if (mode == DragScreen) {
+        //xOffset = 0;
+        //yOffset = 0;
         SetMode(SelectMode);
     }
 
@@ -865,10 +871,19 @@ void MainWindow::OnMouseMove(int pixelX, int pixelY, DWORD flags)
         }
         InvalidateRect(m_hwnd, NULL, FALSE);
     }
-    else if (flags & MK_LBUTTON && mode == DragScreen) {
-        xOffset = (dipX);
-        yOffset = (dipY);
-    }
+    /*else if (flags & MK_LBUTTON && mode == DragScreen) {
+        xOffset = (dipX - ptMouse.x);
+        yOffset = (dipY - ptMouse.y);
+
+        int j = 0;
+        for (auto i = ellipses.begin(); i != ellipses.end(); i++) {
+            (*i)->ellipse.point.x = (*temp)[j].x + xOffset;
+            (*i)->ellipse.point.y = (*temp)[j].y + yOffset;
+            j++;
+        }
+
+        SendMessage(m_hwnd, WM_PAINT, NULL, NULL);
+    } */
 }
 
 HRESULT MainWindow::InsertEllipse(float x, float y)
