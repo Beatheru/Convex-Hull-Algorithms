@@ -17,6 +17,6 @@ public:
 	bool contains(std::vector<struct point>* hull, struct point p);
 	bool isPointInside(struct point p1, struct point p2, struct point testPoint);
 
-	static ConvexHull *minkowskiSum(ConvexHull *hull1, ConvexHull *hull2, Converter *conv);
-	static ConvexHull *minkowskiDifference(ConvexHull *hull1, ConvexHull *hull2, Converter *conv);
+	ConvexHull *minkowskiSum(ConvexHull *hull1, ConvexHull *hull2, Converter *conv);
+	ConvexHull *minkowskiDifference(ConvexHull *hull1, ConvexHull *hull2, Converter *conv);
 };
