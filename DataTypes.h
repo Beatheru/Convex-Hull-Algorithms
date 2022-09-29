@@ -10,6 +10,7 @@ struct vector {
 
 struct vector makeVectorFromPoints(struct point p1, struct point p2);
 double dotProduct(struct vector v1, struct vector v2);
+struct vector normalize(struct vector v);
 
 
 struct point {

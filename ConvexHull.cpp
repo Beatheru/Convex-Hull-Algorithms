@@ -63,24 +63,40 @@ std::vector<struct point> *ConvexHull::getHull() {
 	return hull;
 }
 
+bool ConvexHull::isPointInside(struct point p1, struct point p2, struct point testPoint) {
+	struct vector v = makeVectorFromPoints(p1, p2);
+	struct vector vPerp = { v.y * -1, v.x};
+
+	if (v.y == 0)
+		vPerp.x = 0;
+
+	if (v.x == 0)
+		vPerp.y = 0;
+
+	struct vector vectorPointToTestPoint = makeVectorFromPoints(p1, testPoint);
+	struct vector normalizedVectorPointToTestPoint = normalize(vectorPointToTestPoint);
+	struct vector normalizedPerpendicular = normalize(vPerp);
+
+	if (dotProduct(normalizedPerpendicular, vectorPointToTestPoint) >= 0)
+		return true;
+	return false;
+}
 
 /* Returns true if the point p is inside this convex hull */
 bool ConvexHull::containsPoint(struct point p) {
-	getHull();
-	
-	for (int i = 0; i < hull->size(); i++) {
-		/* A vector representing the edge between points i and i+1 */
-		struct vector v = makeVectorFromPoints(hull->at(i), hull->at((i + 1) % hull->size()));
-		/* The vector perpendicular to the edge, pointing into the hull */
-		struct vector vPerp = { v.y, -v.x };
-		/* The vector between the i'th point on the hull to p */
-		struct vector hullToP = makeVectorFromPoints(hull->at(i), p);
-
-		/* vPerp points into the convex hull, so if the dotproduct is < 0 the
-		 * point is on the outside side of that edge, and is outside the hull */
-		if (dotProduct(vPerp, hullToP) < 0)
-			return false;
+	for (int i = 1; i < hull->size(); i++) {
+		if ((*hull)[i - 1].x != (*hull)[i].x || (*hull)[i - 1].y != (*hull)[i].y) {
+			if (!isPointInside((*hull)[i - 1], (*hull)[i], p)) {
+				return false;
+			}
+		}
 	}
-	/* If the dot product is >= 0 for every edge, p is inside the convex hull */
+
+	if ((*hull)[hull->size() - 1].x != (*hull)[0].x || (*hull)[hull->size() - 1].y != (*hull)[0].y) {
+		if (!isPointInside((*hull)[hull->size() - 1], (*hull)[0], p)) {
+			return false;
+		}
+	}
+
 	return true;
 }
