@@ -13,5 +13,6 @@ public:
 
 	std::vector<struct point> *getHull();
 	bool containsPoint(struct point p);
+	bool contains(std::vector<struct point>* hull, struct point p);
 
 };

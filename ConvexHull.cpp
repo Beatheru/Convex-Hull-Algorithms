@@ -4,19 +4,29 @@ ConvexHull::ConvexHull(std::vector<struct point> points) {
 	this->pointList = points;
 }
 
+bool ConvexHull::contains(std::vector<struct point>* hull, struct point p) {
+	for (int i = 0; i < hull->size(); i++) {
+		struct point temp = (*hull)[i];
+		if (temp.x == p.x && temp.y == p.y)
+			return true;
+	}
+
+	return false;
+
+}
+
 std::vector<struct point> *ConvexHull::getHull() {
-	//delete hull;
 	hull = new std::vector<struct point>;
 
 	/* The topmost, rightmost, bottommost, and leftmost points in the list, in that order */
 	struct point extremePoints[] = { pointList[0], pointList[0], pointList[0], pointList[0] };
 
 	for (int i = 0; i < pointList.size(); i++) {
-		if (pointList[i].y > extremePoints[0].y)
+		if (pointList[i].y < extremePoints[0].y)
 			extremePoints[0] = pointList[i];
 		if (pointList[i].x > extremePoints[1].x)
 			extremePoints[1] = pointList[i];
-		if (pointList[i].y < extremePoints[2].y)
+		if (pointList[i].y > extremePoints[2].y)
 			extremePoints[2] = pointList[i];
 		if (pointList[i].x < extremePoints[3].x)
 			extremePoints[3] = pointList[i];
@@ -27,22 +37,26 @@ std::vector<struct point> *ConvexHull::getHull() {
 
 	// printPoints(stdout, hull, "Extreme points");
 
-	for (int i = 1; i <= hull->size(); i++) {
-		int farthestPoint;
-		if (i < hull->size())
-			farthestPoint = getPointFarthestFromEdge(hull->at(i - 1), hull->at(i), &pointList);
-		else
-			farthestPoint = getPointFarthestFromEdge(hull->at(i - 1), hull->at(0), &pointList);
-		bool inHull = false;
-		for (int j = 0; j < hull->size(); j++) {
-			if (pointList[farthestPoint].x == hull->at(j).x && pointList[farthestPoint].y == hull->at(j).y) {
-				inHull = true;
-				break;
+	for (int i = 1; i < hull->size() + 1; i++) {
+		if (i != hull->size()) {
+			int farthestPoint = getPointFarthestFromEdge((*hull)[i - 1], (*hull)[i], &pointList);
+			if (farthestPoint != -1 && !contains(hull, pointList[farthestPoint])) {
+				hull->insert(hull->begin() + i, pointList[farthestPoint]);
+				if (i > 1)
+					i = i - 2;
+				else
+					i--;
 			}
 		}
-
-		if (!inHull) {
-			hull->insert(hull->begin() + i, pointList[farthestPoint]);
+		else {
+			int farthestPoint = getPointFarthestFromEdge((*hull)[hull->size() - 1], (*hull)[0], &pointList);
+			if (farthestPoint != -1 && !contains(hull, pointList[farthestPoint])) {
+				hull->insert(hull->begin() + i, pointList[farthestPoint]);
+				if (i > 1)
+					i = i - 2;
+				else
+					i--;
+			}
 		}
 	}
 
