@@ -101,10 +101,13 @@ bool ConvexHull::containsPoint(struct point p) {
 	return true;
 }
 
-static ConvexHull *minkowskiAux(ConvexHull *hull1, ConvexHull *hull2, bool sum) {
+static ConvexHull *minkowskiAux(ConvexHull *hull1, ConvexHull *hull2, bool sum, Converter *conv) {
 	std::vector<struct point> *hull1Points = hull1->getHull();
 	std::vector<struct point> *hull2Points = hull2->getHull();
 	std::vector<struct point> *sumPoints = new std::vector<struct point>();
+
+	hull1Points = conv->convertPointsToGrid(hull1Points);
+	hull2Points = conv->convertPointsToGrid(hull2Points);
 
 	for (int i = 0; i < hull1Points->size(); i++) {
 		struct point point1 = hull1Points->at(i);
@@ -119,17 +122,22 @@ static ConvexHull *minkowskiAux(ConvexHull *hull1, ConvexHull *hull2, bool sum) 
 		}
 	}
 
-	ConvexHull *newHull = new ConvexHull(*sumPoints);
+	std::vector<struct point> *newSumPoints = conv->convertPointsToScreen(sumPoints);
+
+	ConvexHull *newHull = new ConvexHull(*newSumPoints);
 	newHull->getHull();
+	delete hull1Points;
+	delete hull2Points;
 	delete sumPoints;
+	delete newSumPoints;
 
 	return newHull;
 }
 
-ConvexHull *ConvexHull::minkowskiSum(ConvexHull *hull1, ConvexHull *hull2) {
-	return minkowskiAux(hull1, hull2, true);
+ConvexHull *ConvexHull::minkowskiSum(ConvexHull *hull1, ConvexHull *hull2, Converter *conv) {
+	return minkowskiAux(hull1, hull2, true, conv);
 }
 
-ConvexHull *ConvexHull::minkowskiDifference(ConvexHull *hull1, ConvexHull *hull2) {
-	return minkowskiAux(hull1, hull2, false);
+ConvexHull *ConvexHull::minkowskiDifference(ConvexHull *hull1, ConvexHull *hull2, Converter *conv) {
+	return minkowskiAux(hull1, hull2, false, conv);
 }

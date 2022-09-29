@@ -4,6 +4,7 @@
 
 #include "ConvexHull.h"
 #include "DataTypes.h"
+#include "Converter.h"
 
 #include <list>
 #include <memory>
@@ -104,6 +105,7 @@ class MainWindow : public BaseWindow<MainWindow>
     size_t                  nextColor;
     int                     paintMode = -1;
     bool                    inHull = false;
+    Converter               *conv;
 
     list<shared_ptr<MyEllipse>>             ellipses;
     list<shared_ptr<MyEllipse>>::iterator   selection;
@@ -173,6 +175,8 @@ HRESULT MainWindow::CreateGraphicsResources()
             const D2D1_COLOR_F color = D2D1::ColorF(1.0f, 1.0f, 0);
             hr = pRenderTarget->CreateSolidColorBrush(color, &pBrush);
         }
+
+        conv = new Converter(rc.right, rc.bottom);
     }
     return hr;
 }
