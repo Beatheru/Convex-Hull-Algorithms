@@ -100,3 +100,36 @@ bool ConvexHull::containsPoint(struct point p) {
 
 	return true;
 }
+
+static ConvexHull *minkowskiAux(ConvexHull *hull1, ConvexHull *hull2, bool sum) {
+	std::vector<struct point> *hull1Points = hull1->getHull();
+	std::vector<struct point> *hull2Points = hull2->getHull();
+	std::vector<struct point> *sumPoints = new std::vector<struct point>();
+
+	for (int i = 0; i < hull1Points->size(); i++) {
+		struct point point1 = hull1Points->at(i);
+		for (int j = 0; j < hull2Points->size(); j++) {
+			struct point point2 = hull2Points->at(j);
+			struct point newPoint;
+			if(sum)
+				newPoint = { point1.x + point2.x, point1.y + point2.y };
+			else
+				newPoint = { point1.x - point2.x, point1.y - point2.y };
+			sumPoints->push_back(newPoint);
+		}
+	}
+
+	ConvexHull *newHull = new ConvexHull(*sumPoints);
+	newHull->getHull();
+	delete sumPoints;
+
+	return newHull;
+}
+
+ConvexHull *ConvexHull::minkowskiSum(ConvexHull *hull1, ConvexHull *hull2) {
+	return minkowskiAux(hull1, hull2, true);
+}
+
+ConvexHull *ConvexHull::minkowskiDifference(ConvexHull *hull1, ConvexHull *hull2) {
+	return minkowskiAux(hull1, hull2, false);
+}
