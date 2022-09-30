@@ -105,11 +105,15 @@ class MainWindow : public BaseWindow<MainWindow>
 
     Mode                    mode;
     size_t                  nextColor;
+
     int                     paintMode = -1;
     bool                    inHull = false;
     Converter               *conv;
     std::vector<ConvexHull*> *hulls = new std::vector<ConvexHull*>;
     int                     hullSelected;
+
+    struct point origin;
+    struct point originOriginal;
 
     double                  xOffset = 0;
     double                  yOffset = 0;
@@ -188,7 +192,7 @@ HRESULT MainWindow::CreateGraphicsResources()
             hr = pRenderTarget->CreateSolidColorBrush(color, &pBrush);
         }
 
-        conv = new Converter(rc.right, rc.bottom);
+        
     }
     return hr;
 }
@@ -279,6 +283,9 @@ void MainWindow::PaintMinkowskiGJK()
         horizontalY = rc.bottom / 2.f;
         verticalX = rc.right / 2.f;
 
+        origin = { rc.right / 2.f, rc.bottom / 2.f };
+        conv->setOrigin(origin.x, origin.y);
+
         pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Yellow));
         pRenderTarget->DrawLine(D2D1::Point2F(0, horizontalY), D2D1::Point2F(rc.right, horizontalY), pBrush, 1);
         pRenderTarget->DrawLine(D2D1::Point2F(verticalX, 0), D2D1::Point2F(verticalX, rc.bottom), pBrush, 1);
@@ -332,7 +339,11 @@ void MainWindow::PaintMinkowskiGJK()
 
         //////////////////////////////////////////////////////////////
 
+        
         ConvexHull* newHull = paintMode == MINKOWSKI_SUM ? hull1->minkowskiSum(hull1, hull2, conv) : hull1->minkowskiDifference(hull1, hull2, conv);
+
+        //hullPoints = newHull->getHull();
+
         DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::White));
 
         for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
@@ -359,7 +370,7 @@ void MainWindow::UpdateMinkowskiGJK() {
 
         RECT rc;
         GetClientRect(m_hwnd, &rc);
-        struct point origin = { rc.right / 2.f, rc.bottom / 2.f };
+        
 
         
         pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Yellow));
@@ -683,6 +694,7 @@ void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
         ptMouse.x = dipX;
         ptMouse.y = dipY;
         temp->clear();
+        originOriginal = origin;
         for (int i = ellipses.size() / 2; i < ellipses.size(); i++) {
             auto iterator = ellipses.begin();
             std::advance(iterator, i);
@@ -698,6 +710,7 @@ void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
         ptMouse.y = dipY;
         horizontalOriginalY = horizontalY;
         verticalOriginalX = verticalX;
+        originOriginal = origin;
         temp->clear();
         for (auto i = ellipses.begin(); i != ellipses.end(); i++) {
             temp->push_back({ (*i)->ellipse.point.x, (*i)->ellipse.point.y });
@@ -726,8 +739,6 @@ void MainWindow::OnLButtonUp()
         pRenderTarget->EndDraw();
     }
     else if (mode == DragScreen) {
-        //xOffset = 0;
-        //yOffset = 0;
         SetMode(SelectMode);
     }
     else if (mode == DragHull) {
@@ -786,6 +797,10 @@ void MainWindow::OnMouseMove(int pixelX, int pixelY, DWORD flags)
 
         horizontalY = horizontalOriginalY + yOffset;
         verticalX = verticalOriginalX + xOffset;
+
+        origin.x = originOriginal.x + xOffset;
+        origin.y = originOriginal.y + yOffset;
+        conv->setOrigin(origin.x, origin.y);
 
         int j = 0;
         for (auto i = ellipses.begin(); i != ellipses.end(); i++) {
@@ -950,6 +965,9 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
         DPIScale::Initialize(pFactory);
         SetMode(SelectMode);
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+        conv = new Converter(rc.right, rc.bottom);
         return 0;
 
     case WM_DESTROY:
