@@ -93,7 +93,8 @@ class MainWindow : public BaseWindow<MainWindow>
         SelectMode,
         DragMode,
         DragScreen,
-        DragHull
+        DragHull1,
+        DragHull2
     };
 
     HCURSOR                 hCursor;
@@ -104,7 +105,6 @@ class MainWindow : public BaseWindow<MainWindow>
     D2D1_POINT_2F           ptMouse;
 
     Mode                    mode;
-    size_t                  nextColor;
 
     int                     paintMode = -1;
     bool                    inHull = false;
@@ -122,6 +122,8 @@ class MainWindow : public BaseWindow<MainWindow>
     double                   verticalOriginalX;
     double                   horizontalY;
     double                   verticalX;
+
+    int                      scale = 5;
 
     std::vector<struct point>* temp = new std::vector<struct point>;
 
@@ -159,11 +161,12 @@ class MainWindow : public BaseWindow<MainWindow>
     void    OnLButtonDown(int pixelX, int pixelY, DWORD flags);
     void    OnLButtonUp();
     void    OnMouseMove(int pixelX, int pixelY, DWORD flags);
+    void    OnMouseScroll(int wheelData);
 
 public:
 
     MainWindow() : pFactory(NULL), pRenderTarget(NULL), pBrush(NULL), 
-        ptMouse(D2D1::Point2F()), nextColor(0), selection(ellipses.end())
+        ptMouse(D2D1::Point2F()), selection(ellipses.end())
     {
     }
 
@@ -191,8 +194,6 @@ HRESULT MainWindow::CreateGraphicsResources()
             const D2D1_COLOR_F color = D2D1::ColorF(1.0f, 1.0f, 0);
             hr = pRenderTarget->CreateSolidColorBrush(color, &pBrush);
         }
-
-        
     }
     return hr;
 }
@@ -272,6 +273,7 @@ void MainWindow::PaintMinkowskiGJK()
         PAINTSTRUCT ps;
         ellipses.clear();
         hulls->clear();
+        scale = 5;
         BeginPaint(m_hwnd, &ps);
 
         pRenderTarget->BeginDraw();
@@ -371,8 +373,6 @@ void MainWindow::UpdateMinkowskiGJK() {
         RECT rc;
         GetClientRect(m_hwnd, &rc);
         
-
-        
         pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Yellow));
         pRenderTarget->DrawLine(D2D1::Point2F(0, horizontalY), D2D1::Point2F(rc.right, horizontalY), pBrush, 1);
         pRenderTarget->DrawLine(D2D1::Point2F(verticalX, 0), D2D1::Point2F(verticalX, rc.bottom), pBrush, 1);
@@ -383,7 +383,7 @@ void MainWindow::UpdateMinkowskiGJK() {
             auto iterator = ellipses.begin();
             std::advance(iterator, i);
             
-            struct point p = { (*iterator)->ellipse.point.x, (*iterator)->ellipse.point.y };
+            struct point p = { (*iterator)->ellipse.point.x + (scale - 5) * 100, (*iterator)->ellipse.point.y - (scale - 5) * 100 };
             points->push_back(p);
         }
 
@@ -417,8 +417,11 @@ void MainWindow::UpdateMinkowskiGJK() {
         else
             DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::White));
 
-        for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
+        for (auto i = ellipses.begin(); i != ellipses.end(); ++i) {
+            (*i)->ellipse.point.x += (scale - 5) * 100;
+            (*i)->ellipse.point.y -= (scale - 5) * 100;
             (*i)->Draw(pRenderTarget, pBrush);
+        }
 
         delete points;
 
@@ -438,6 +441,7 @@ void MainWindow::PaintQuickhull()
     {
         PAINTSTRUCT ps;
         ellipses.clear();
+        hulls->clear();
         BeginPaint(m_hwnd, &ps);
 
         pRenderTarget->BeginDraw();
@@ -467,8 +471,9 @@ void MainWindow::PaintQuickhull()
         ConvexHull *hull = new ConvexHull(*points);
         DrawConvexHull(hull->getHull(), D2D1::ColorF(D2D1::ColorF::White));
 
+        hulls->push_back(hull);
+
         delete points;
-        delete hull;
 
         for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
             (*i)->Draw(pRenderTarget, pBrush);
@@ -502,9 +507,9 @@ void MainWindow::UpdateQuickhull() {
 
         ConvexHull* hull = new ConvexHull(*points);
         DrawConvexHull(hull->getHull(), D2D1::ColorF(D2D1::ColorF::White));
+        (*hulls)[0] = hull;
 
         delete points;
-        delete hull;
 
         for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
             (*i)->Draw(pRenderTarget, pBrush);
@@ -525,6 +530,7 @@ void MainWindow::PaintPointConvexHull()
     {
         PAINTSTRUCT ps;
         ellipses.clear();
+        hulls->clear();
         BeginPaint(m_hwnd, &ps);
 
         pRenderTarget->BeginDraw();
@@ -553,9 +559,9 @@ void MainWindow::PaintPointConvexHull()
 
         ConvexHull* hull = new ConvexHull(*points);
         DrawConvexHull(hull->getHull(), D2D1::ColorF(D2D1::ColorF::White));
+        hulls->push_back(hull);
 
         delete points;
-        delete hull;
 
         int x = rand() % rightLimit + 500;
         int y = rand() % bottomLimit + 150;
@@ -601,6 +607,8 @@ void MainWindow::UpdatePointConvexHull() {
         ConvexHull* hull = new ConvexHull(*points);
         DrawConvexHull(hull->getHull(), D2D1::ColorF(D2D1::ColorF::White));
 
+        (*hulls)[0] = hull;
+
         if (hull->containsPoint({ ellipses.back()->ellipse.point.x, ellipses.back()->ellipse.point.y })) {
             inHull = true;
             if (mode == DragMode) {
@@ -630,7 +638,6 @@ void MainWindow::UpdatePointConvexHull() {
         }
 
         delete points;
-        delete hull;
 
         hr = pRenderTarget->EndDraw();
         if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
@@ -673,7 +680,8 @@ void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
 
         SetMode(DragMode);
     }
-    else if ((*hulls)[0] != NULL && (*hulls)[0]->containsPoint({ dipX, dipY })) {
+    else if ((paintMode == MINKOWSKI_SUM || paintMode == MINKOWSKI_DIFFERENCE || paintMode == GJK) && 
+             (*hulls)[0] != NULL && (*hulls)[0]->containsPoint({ dipX, dipY })) {
         SetCapture(m_hwnd);
         hullSelected = 0;
         ptMouse.x = dipX;
@@ -686,9 +694,10 @@ void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
             struct point p = { (*iterator)->ellipse.point.x, (*iterator)->ellipse.point.y };
             temp->push_back(p);
         }
-        SetMode(DragHull);
+        SetMode(DragHull1);
     }
-    else if ((*hulls)[1] != NULL && (*hulls)[1]->containsPoint({ dipX, dipY })) {
+    else if ((paintMode == MINKOWSKI_SUM || paintMode == MINKOWSKI_DIFFERENCE || paintMode == GJK) &&
+             (*hulls)[1] != NULL && (*hulls)[1]->containsPoint({ dipX, dipY })) {
         SetCapture(m_hwnd);
         hullSelected = 1;
         ptMouse.x = dipX;
@@ -702,9 +711,9 @@ void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
             struct point p = { (*iterator)->ellipse.point.x, (*iterator)->ellipse.point.y };
             temp->push_back(p);
         }
-        SetMode(DragHull);
+        SetMode(DragHull1);
     }
-    else {
+    else if (paintMode == MINKOWSKI_SUM || paintMode == MINKOWSKI_DIFFERENCE || paintMode == GJK) {
         SetCapture(m_hwnd);
         ptMouse.x = dipX;
         ptMouse.y = dipY;
@@ -716,6 +725,17 @@ void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
             temp->push_back({ (*i)->ellipse.point.x, (*i)->ellipse.point.y });
         }
         SetMode(DragScreen);
+    }
+    else if ((paintMode == QUICKHULL || paintMode == POINT_CONVEX_HULL) && (*hulls)[0]->containsPoint({ dipX, dipY })) {
+        SetCapture(m_hwnd);
+        ptMouse.x = dipX;
+        ptMouse.y = dipY;
+        temp->clear();
+        for (auto i = ellipses.begin(); i != ellipses.end(); i++) {
+            struct point p = { (*i)->ellipse.point.x, (*i)->ellipse.point.y };
+            temp->push_back(p);
+        }
+        SetMode(DragHull2);
     }
 
     InvalidateRect(m_hwnd, NULL, FALSE);
@@ -741,7 +761,7 @@ void MainWindow::OnLButtonUp()
     else if (mode == DragScreen) {
         SetMode(SelectMode);
     }
-    else if (mode == DragHull) {
+    else if (mode == DragHull1 || mode == DragHull2) {
         SetMode(SelectMode);
     }
 
@@ -763,7 +783,7 @@ void MainWindow::OnMouseMove(int pixelX, int pixelY, DWORD flags)
         }
         InvalidateRect(m_hwnd, NULL, FALSE);
     }
-    else if (flags & MK_LBUTTON && mode == DragHull) {
+    else if (flags & MK_LBUTTON && mode == DragHull1) {
         xOffset = (dipX - ptMouse.x);
         yOffset = (dipY - ptMouse.y);
         int j = 0;
@@ -787,6 +807,19 @@ void MainWindow::OnMouseMove(int pixelX, int pixelY, DWORD flags)
                 (*iterator)->ellipse.point.y = (*temp)[j].y + yOffset;
                 j++;
             }
+        }
+
+        SendMessage(m_hwnd, WM_PAINT, NULL, NULL);
+    }
+    else if (flags & MK_LBUTTON && mode == DragHull2) {
+        xOffset = (dipX - ptMouse.x);
+        yOffset = (dipY - ptMouse.y);
+        int j = 0;
+
+        for (auto i = ellipses.begin(); i != ellipses.end(); i++) {
+            (*i)->ellipse.point.x = (*temp)[j].x + xOffset;
+            (*i)->ellipse.point.y = (*temp)[j].y + yOffset;
+            j++;
         }
 
         SendMessage(m_hwnd, WM_PAINT, NULL, NULL);
@@ -855,7 +888,11 @@ void MainWindow::SetMode(Mode m)
         cursor = IDC_HAND;
         break;
 
-    case DragHull:
+    case DragHull1:
+        cursor = IDC_HAND;
+        break;
+
+    case DragHull2:
         cursor = IDC_HAND;
         break;
     }
@@ -931,6 +968,30 @@ void createButtons(HWND m_hwnd) {
         NULL);      // Pointer not needed.
 }
 
+void MainWindow::OnMouseScroll(int wheelData) {
+    int nDelta = 0;
+    nDelta += wheelData;
+    if (abs(nDelta) >= WHEEL_DELTA)
+    {
+        if (nDelta > 0)
+        {
+            scale += 1;
+            
+            if (scale > 15)
+                scale = 15;
+        }
+        else
+        {
+            scale -= 1;
+
+            if (scale < 1)
+                scale = 1;
+        }
+        nDelta = 0;
+        InvalidateRect(m_hwnd, NULL, FALSE);
+    }
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 {
     MainWindow win;
@@ -994,6 +1055,10 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_MOUSEMOVE: 
         OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), (DWORD)wParam);
+        return 0;
+
+    case WM_MOUSEWHEEL:
+        OnMouseScroll(GET_WHEEL_DELTA_WPARAM(wParam));
         return 0;
 
     case WM_SETCURSOR:
