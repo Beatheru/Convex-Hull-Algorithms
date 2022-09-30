@@ -395,6 +395,7 @@ void MainWindow::UpdateMinkowskiGJK() {
         RECT rc;
         GetClientRect(m_hwnd, &rc);
         
+        gridLength = 25 + (scale - 5) * 3;
         DrawGrid();
         DrawAxis();
 
@@ -475,7 +476,6 @@ void MainWindow::UpdateMinkowskiGJK() {
         }
 
         oldScale = scale;
-        gridLength = 25 + (scale - 5) * 3;
         
         ConvexHull *hull2 = new ConvexHull(*points);
         (*hulls)[1] = hull2;
@@ -646,7 +646,17 @@ void MainWindow::PaintPointConvexHull()
         newEllipse->ellipse = point;
         newEllipse->color = D2D1::ColorF(D2D1::ColorF::Green);
         ellipses.insert(ellipses.end(), newEllipse);
-        (*newEllipse).Draw(pRenderTarget, pBrush);
+
+        if (hull->containsPoint({ newEllipse->ellipse.point.x, newEllipse->ellipse.point.y })) {
+            pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
+            pRenderTarget->DrawEllipse(newEllipse->ellipse, pBrush, 5.0f);
+            pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Red));
+            pRenderTarget->FillEllipse(newEllipse->ellipse, pBrush);
+            
+        }
+        else {
+            newEllipse->Draw(pRenderTarget, pBrush);
+        }
 
         hr = pRenderTarget->EndDraw();
         if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
