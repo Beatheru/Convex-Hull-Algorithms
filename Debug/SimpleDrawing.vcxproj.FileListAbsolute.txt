@@ -1,1 +1,0 @@
-C:\Users\Beath\Desktop\Collision Algorithms\cpp\Debug\ConvexHullAlgorithms.exe
