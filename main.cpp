@@ -67,7 +67,7 @@ struct MyEllipse
     void Draw(ID2D1RenderTarget *pRT, ID2D1SolidColorBrush *pBrush)
     {
         pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
-        pRT->DrawEllipse(ellipse, pBrush, 5.0f);
+        pRT->DrawEllipse(ellipse, pBrush, 5.f);
         pBrush->SetColor(color);
         pRT->FillEllipse(ellipse, pBrush);
     }
@@ -121,7 +121,9 @@ class MainWindow : public BaseWindow<MainWindow>
 
     double                  xOffset = 0;
     double                  yOffset = 0;
-    //int                   scale = 5;
+    int                     scale = 5;
+    int                     oldScale = 5;
+    double                  gridLength = 25;
 
     list<shared_ptr<MyEllipse>>             ellipses;
     list<shared_ptr<MyEllipse>>::iterator   selection;
@@ -159,7 +161,7 @@ class MainWindow : public BaseWindow<MainWindow>
     void    OnLButtonDown(int pixelX, int pixelY, DWORD flags);
     void    OnLButtonUp();
     void    OnMouseMove(int pixelX, int pixelY, DWORD flags);
-    //void    OnMouseScroll(int wheelData);
+    void    OnMouseScroll(int wheelData);
 
 public:
 
@@ -208,39 +210,39 @@ void MainWindow::DrawConvexHull(std::vector<struct point> *hullPoints, D2D1::Col
     for (int i = 0; i < hullPoints->size() - 1; i++) {
         pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[i].x, (*hullPoints)[i].y),
             D2D1::Point2F((*hullPoints)[i + 1].x, (*hullPoints)[i + 1].y),
-            pBrush, 1);
+            pBrush, 2);
     }
 
     pRenderTarget->DrawLine(D2D1::Point2F((*hullPoints)[hullPoints->size() - 1].x, (*hullPoints)[hullPoints->size() - 1].y),
         D2D1::Point2F((*hullPoints)[0].x, (*hullPoints)[0].y),
-        pBrush, 1);
+        pBrush, 2);
 }
 
 void MainWindow::DrawGrid() {
     RECT rc;
     GetClientRect(m_hwnd, &rc);
     pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
-    double thickness = 0.4;
+    double thickness = 0.35;
 
-    for (int i = origin.x; i < rc.right; i = i + 25)
+    for (int i = origin.x; i < rc.right; i = i + gridLength)
         pRenderTarget->DrawLine(D2D1::Point2F(i, 0), D2D1::Point2F(i, rc.bottom), pBrush, thickness);
 
-    for (int i = origin.x; i > rc.left; i = i - 25)
+    for (int i = origin.x; i > rc.left; i = i - gridLength)
         pRenderTarget->DrawLine(D2D1::Point2F(i, 0), D2D1::Point2F(i, rc.bottom), pBrush, thickness);
 
-    for (int i = origin.y; i < rc.bottom; i = i + 25)
+    for (int i = origin.y; i < rc.bottom; i = i + gridLength)
         pRenderTarget->DrawLine(D2D1::Point2F(0, i), D2D1::Point2F(rc.right, i), pBrush, thickness);
 
-    for (int i = origin.y; i > rc.top; i = i - 25)
+    for (int i = origin.y; i > rc.top; i = i - gridLength)
         pRenderTarget->DrawLine(D2D1::Point2F(0, i), D2D1::Point2F(rc.right, i), pBrush, thickness);
 }
 
 void MainWindow::DrawAxis() {
     RECT rc;
     GetClientRect(m_hwnd, &rc);
-    pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Yellow));
-    pRenderTarget->DrawLine(D2D1::Point2F(0, horizontalY), D2D1::Point2F(rc.right, horizontalY), pBrush, 2);
-    pRenderTarget->DrawLine(D2D1::Point2F(verticalX, 0), D2D1::Point2F(verticalX, rc.bottom), pBrush, 2);
+    pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Gray));
+    pRenderTarget->DrawLine(D2D1::Point2F(0, horizontalY), D2D1::Point2F(rc.right, horizontalY), pBrush, 5);
+    pRenderTarget->DrawLine(D2D1::Point2F(verticalX, 0), D2D1::Point2F(verticalX, rc.bottom), pBrush, 5);
 }
 
 void MainWindow::OnPaintDefault()
@@ -298,7 +300,7 @@ void MainWindow::PaintMinkowskiGJK()
         PAINTSTRUCT ps;
         ellipses.clear();
         hulls->clear();
-        //scale = 5;
+        scale = 5;
         BeginPaint(m_hwnd, &ps);
 
         pRenderTarget->BeginDraw();
@@ -366,7 +368,7 @@ void MainWindow::PaintMinkowskiGJK()
         /////////////////////////////////////////////////////////////////////////////////////////
         
         ConvexHull* newHull = paintMode == MINKOWSKI_SUM ? hull1->minkowskiSum(hull1, hull2, conv) : hull1->minkowskiDifference(hull1, hull2, conv);
-        DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::White));
+        DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::Magenta));
 
         for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
             (*i)->Draw(pRenderTarget, pBrush);
@@ -401,6 +403,31 @@ void MainWindow::UpdateMinkowskiGJK() {
         for (int i = 0; i < ellipses.size() / 2; i++) {
             auto iterator = ellipses.begin();
             std::advance(iterator, i);
+
+            double xDisplace = ((*iterator)->ellipse.point.x - origin.x);
+            xDisplace /= gridLength;
+            xDisplace *= 3;
+
+            double yDisplace = -1 * ((*iterator)->ellipse.point.y - origin.y);
+            yDisplace /= gridLength;
+            yDisplace *= 3;
+
+            if (oldScale != scale) {
+                if (scale > oldScale) {
+                    (*iterator)->ellipse.point.x += xDisplace;
+                    (*iterator)->ellipse.point.y -= yDisplace;
+                    
+                    (*iterator)->ellipse.radiusX += 1;
+                    (*iterator)->ellipse.radiusY += 1;
+                }
+                else {
+                    (*iterator)->ellipse.point.x -= xDisplace;
+                    (*iterator)->ellipse.point.y += yDisplace;
+                    
+                    (*iterator)->ellipse.radiusX -= 1;
+                    (*iterator)->ellipse.radiusY -= 1;
+                }
+            }
             
             struct point p = { (*iterator)->ellipse.point.x, (*iterator)->ellipse.point.y };
             points->push_back(p);
@@ -418,10 +445,38 @@ void MainWindow::UpdateMinkowskiGJK() {
             auto iterator = ellipses.begin();
             std::advance(iterator, i);
 
+            double xDisplace = ((*iterator)->ellipse.point.x - origin.x);
+            xDisplace /= gridLength;
+            xDisplace *= 3;
+
+            double yDisplace = -1 * ((*iterator)->ellipse.point.y - origin.y);
+            yDisplace /= gridLength;
+            yDisplace *= 3;
+
+            if (oldScale != scale) {
+                if (scale > oldScale) {
+                    (*iterator)->ellipse.point.x += xDisplace;
+                    (*iterator)->ellipse.point.y -= yDisplace;
+                    
+                    (*iterator)->ellipse.radiusX += 1;
+                    (*iterator)->ellipse.radiusY += 1;
+                }
+                else {
+                    (*iterator)->ellipse.point.x -= xDisplace;
+                    (*iterator)->ellipse.point.y += yDisplace;
+                    
+                    (*iterator)->ellipse.radiusX -= 1;
+                    (*iterator)->ellipse.radiusY -= 1;
+                }
+            }
+
             struct point p = { (*iterator)->ellipse.point.x, (*iterator)->ellipse.point.y };
             points->push_back(p);
         }
 
+        oldScale = scale;
+        gridLength = 25 + (scale - 5) * 3;
+        
         ConvexHull *hull2 = new ConvexHull(*points);
         (*hulls)[1] = hull2;
         DrawConvexHull(hull2->getHull(), D2D1::ColorF(D2D1::ColorF::White));
@@ -434,17 +489,14 @@ void MainWindow::UpdateMinkowskiGJK() {
 
         if (paintMode == GJK)
             if (newHull->containsPoint(origin))
-                DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::Red));
+                DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::LimeGreen));
             else
-                DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::White));
+                DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::Magenta));
         else
-            DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::White));
+            DrawConvexHull(newHull->getHull(), D2D1::ColorF(D2D1::ColorF::Magenta));
 
-        for (auto i = ellipses.begin(); i != ellipses.end(); ++i) {
-            //(*i)->ellipse.point.x += (scale - 5) * 100;
-            //(*i)->ellipse.point.y -= (scale - 5) * 100;
+        for (auto i = ellipses.begin(); i != ellipses.end(); ++i)
             (*i)->Draw(pRenderTarget, pBrush);
-        }
 
         hr = pRenderTarget->EndDraw();
         if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
@@ -989,20 +1041,19 @@ void createButtons(HWND m_hwnd) {
         NULL);      // Pointer not needed.
 }
 
-/*void MainWindow::OnMouseScroll(int wheelData) {
+void MainWindow::OnMouseScroll(int wheelData) {
     int nDelta = 0;
     nDelta += wheelData;
     if (abs(nDelta) >= WHEEL_DELTA)
     {
         if (nDelta > 0)
         {
-            scale += 1;
-            
-            if (scale > 15)
-                scale = 15;
+            oldScale = scale;
+            scale += 1;  
         }
         else
         {
+            oldScale = scale;
             scale -= 1;
 
             if (scale < 1)
@@ -1011,7 +1062,7 @@ void createButtons(HWND m_hwnd) {
         nDelta = 0;
         InvalidateRect(m_hwnd, NULL, FALSE);
     }
-} */
+}
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 {
@@ -1078,9 +1129,9 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
         OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), (DWORD)wParam);
         return 0;
 
-    /*case WM_MOUSEWHEEL:
+    case WM_MOUSEWHEEL:
         OnMouseScroll(GET_WHEEL_DELTA_WPARAM(wParam));
-        return 0; */
+        return 0;
 
     case WM_SETCURSOR:
         if (LOWORD(lParam) == HTCLIENT)
